@@ -1,0 +1,9 @@
+[package]
+name = "fquick"
+version = "1.0.0"
+edition = "2021"
+
+[dependencies]
+flate2 = "1"
+structopt = "0"
+rayon = "1"
