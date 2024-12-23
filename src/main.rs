@@ -1,11 +1,10 @@
 use std::fs::File;
-use std::io::{BufRead, BufReader, BufWriter, Write, Read};
+use std::io::{BufRead, BufReader, BufWriter, Write};
 use std::path::PathBuf;
 use flate2::read::MultiGzDecoder;
 use flate2::write::GzEncoder;
 use flate2::Compression;
-use std::io;
-use std::io::Cursor;
+use noodles_bgzf as bgzf;
 
 use structopt::StructOpt;
 
@@ -30,8 +29,7 @@ fn main() -> std::io::Result<()> {
     let hist_filename = format!("{}_phred_hist.csv", config.output_prefix);
     
     let input_file = File::open(config.input_file)?;
-    // Create a concatenated gzip reader
-    let reader = BufReader::new(ConcatenatedGzipReader::new(input_file));
+    let reader = bgzf::Reader::new(input_file);
     
     let per_read_output_file = File::create(per_read_filename)?;
     
@@ -113,59 +111,3 @@ fn error_prob_to_phred(prob: f64) -> f64 {
     return -10.0_f64 * prob.log10()
 }
 
-
-struct ConcatenatedGzipReader<R: Read> {
-    inner: R,
-    current_decoder: Option<MultiGzDecoder<Cursor<Vec<u8>>>>,
-    buffer: Vec<u8>,
-}
-
-impl<R: Read> ConcatenatedGzipReader<R> {
-    fn new(inner: R) -> Self {
-        ConcatenatedGzipReader {
-            inner: inner,
-            current_decoder: None,
-            buffer: Vec::new(),
-        }
-    }
-}
-
-impl<R: Read> Read for ConcatenatedGzipReader<R> {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        if self.current_decoder.is_none() {
-            // Read the next chunk of compressed data
-            let mut chunk = Vec::new();
-            let mut temp_buf = [0u8; 4096];
-            
-            loop {
-                match self.inner.read(&mut temp_buf)? {
-                    0 => break,
-                    n => chunk.extend_from_slice(&temp_buf[..n]),
-                }
-                
-                if chunk.is_empty() {
-                    return Ok(0);
-                }
-                
-                // Try to create a decoder with the current chunk
-                let cursor = Cursor::new(chunk);
-                self.current_decoder = Some(MultiGzDecoder::new(cursor));
-                break;
-            }
-        }
-        
-        if let Some(ref mut decoder) = self.current_decoder {
-            let result = std::io::Read::read(decoder, buf);
-            match result {
-                Ok(0) => {
-                    // Current gzip stream ended, prepare for next one
-                    self.current_decoder = None;
-                    self.read(buf)
-                }
-                other => other,
-            }
-        } else {
-            Ok(0)
-        }
-    }
-}
