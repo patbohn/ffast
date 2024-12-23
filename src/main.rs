@@ -4,7 +4,6 @@ use std::path::PathBuf;
 use flate2::read::MultiGzDecoder;
 use flate2::write::GzEncoder;
 use flate2::Compression;
-use noodles_bgzf as bgzf;
 
 use structopt::StructOpt;
 
@@ -29,7 +28,7 @@ fn main() -> std::io::Result<()> {
     let hist_filename = format!("{}_phred_hist.csv", config.output_prefix);
     
     let input_file = File::open(config.input_file)?;
-    let reader = bgzf::Reader::new(input_file);
+    let reader = BufReader::new(MultiGzDecoder::new(input_file));
     
     let per_read_output_file = File::create(per_read_filename)?;
     
